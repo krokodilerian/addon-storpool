@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2015-2016, StorPool (storpool.com)                               #
+#                                                                            #
+# Portions copyright OpenNebula Project (OpenNebula.org), CG12 Labs          #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+DRIVER_PATH=$(dirname $0)
+
+source $DRIVER_PATH/kvmrc
+source $DRIVER_PATH/../../scripts_common.sh
+DEPLOY_ID=$1
+FILE=$2
+
+VM_ID=$4
+DS_ID=$5
+
+#-------------------------------------------------------------------------------
+
+source $DRIVER_PATH/../../tm/storpool/storpool_common.sh
+
+SP_VOL="one-sys-$VM_ID-${FILE##*/}"
+SP_LINK="/dev/storpool/$SP_VOL"
+SP_TEMPLATE="one-ds-$DS_ID"
+SP_COMPRESSION="${SP_COMPRESSION:-lz4}"
+
+FILE_SIZE=$(du -b \"$FILE\" | cut -f 1)
+
+if [ -n "$FILE_SIZE" ]; then
+    VOLUME_SIZE=$(( (FILE_SIZE *2 +511) /512 *512 ))
+    VOLUME_SIZE=$((volume_size/1024/1024))
+else
+    log "Error in checkpoint export: Can't get file size $FILE!"
+    exit 1
+fi
+
+splog "checkpoint_size=${FILE_SIZE} volume_size=${VOLUME_SIZE}M"
+
+storpoolVolumeCreate "$SP_VOL" "$VOLUME_SIZE"M "$SP_TEMPLATE"
+
+trapAdd "storpoolVolumeDelete \"$SP_VOL\" \"force\""
+
+storpoolVolumeAttach "$SP_VOL"
+
+if tar --no-seek --use-compress-program="$SP_COMPRESSION" --create --file="$SP_LINK" "$FILE"; then
+   splog "SAVED $FILE to $SP_VOL"
+   splog "rm -f $FILE"
+   rm -f "$FILE"
+else
+   splog "Error: Failed to save $FILE to $SP_VOL ($?)"
+   exit 1
+fi
+
+trapReset
+
+storpoolVolumeDetach "$SP_VOL"
+
+exit 0
