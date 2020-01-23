@@ -2,6 +2,7 @@
 
 StorPool Volumecare is a framework to schedule and maintain recovery snapshots in StorPool. This integration allows specifying snapshot policies per VM from within the ONE interface by introducing new VM template variable _VC_POLICY_.
 
+More information on `storpool_volumecare` can be found [here](https://kb.storpool.com/storpool_misc/volumecare.html).
 
 ## Installation
 
